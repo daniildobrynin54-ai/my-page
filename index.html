@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Таблица</title>
-<link href="https://docs.google.com/spreadsheets/d/1sYvrBU9BPhcoxTnNJfx8TOutxwFrSiRm2mw_8s6rdZM/edit?usp=sharing" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Unbounded:wght@300;600&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #0e0f13;
@@ -328,15 +328,23 @@
 
 <script>
 // ─────────────────────────────────────────
-//  НАСТРОЙКИ — измени при необходимости
+//  НАСТРОЙКИ
 // ─────────────────────────────────────────
 const SHEET_ID = '1sYvrBU9BPhcoxTnNJfx8TOutxwFrSiRm2mw_8s6rdZM';
 
-// Листы: { название: gid }
-// Добавь нужные листы сюда вручную или оставь один
+// Листы по названию (именно так, как в таблице)
 const SHEETS = {
-  'Лист 1': '846561775',
-  // 'Лист 2': '0',
+  'Список (new)':            { gid: '846561775' },
+  'Профиль (копия)':         { gid: null, name: 'Профиль (копия)' },
+  'Коллекционеры':           { gid: null, name: 'Коллекционеры' },
+  'Арканы/Пути(new)':        { gid: null, name: 'Арканы/Пути(new)' },
+  'Вайтлист':                { gid: null, name: 'Вайтлист' },
+  'Регист.':                 { gid: null, name: 'Регист.' },
+  'Интерактив':              { gid: null, name: 'Интерактив' },
+  'Хотелки по общему от 12.05': { gid: null, name: 'Хотелки по общему от 12.05' },
+  'Карты в общем от 17.05':  { gid: null, name: 'Карты в общем от 17.05' },
+  'БД':                      { gid: null, name: 'БД' },
+  'транзакции':              { gid: null, name: 'транзакции' },
 };
 // ─────────────────────────────────────────
 
@@ -355,12 +363,11 @@ function toast(msg, isError = false) {
 // ── Build tab buttons ────────────────────
 (function buildTabs() {
   const container = document.getElementById('tabs');
-  const names = Object.keys(SHEETS);
-  if (names.length <= 1) { container.style.display = 'none'; }
-  names.forEach((name, i) => {
+  Object.keys(SHEETS).forEach((name, i) => {
     const btn = document.createElement('button');
     btn.className = 'tab' + (i === 0 ? ' active' : '');
     btn.textContent = name;
+    btn.dataset.sheet = name;
     btn.onclick = () => {
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
       btn.classList.add('active');
@@ -370,18 +377,28 @@ function toast(msg, isError = false) {
   });
 })();
 
+// ── Col letter helper ──────────────────────
+function colLetter(i) {
+  let s = '';
+  i++;
+  while (i > 0) { s = String.fromCharCode(64 + (i % 26 || 26)) + s; i = Math.floor((i - 1) / 26); }
+  return s;
+}
+
 // ── Load sheet data ──────────────────────
 async function loadSheet(sheetName) {
   if (!sheetName) sheetName = Object.keys(SHEETS)[0];
   currentSheetName = sheetName;
-  const gid = SHEETS[sheetName];
+  const sheet = SHEETS[sheetName];
+  const gid = sheet?.gid;
+  const sheetParam = gid ? `gid=${gid}` : `sheet=${encodeURIComponent(sheet?.name || sheetName)}`;
 
   document.getElementById('tableContainer').innerHTML =
     '<div class="state"><div class="spinner"></div><span>Загрузка…</span></div>';
   document.getElementById('rowCounter').textContent = '';
   sortState = { col: -1, dir: 1 };
 
-  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${gid}`;
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&${sheetParam}`;
 
   try {
     const res = await fetch(url);
@@ -391,9 +408,10 @@ async function loadSheet(sheetName) {
     const json = JSON.parse(match[1]);
     if (json.status === 'error') throw new Error(json.errors?.[0]?.detailed_message || 'Ошибка API');
 
-    const cols = json.table.cols.filter(c => c.label);
+    // Keep ALL columns; use letter fallback if label is empty
+    const cols = json.table.cols.map((c, i) => ({ ...c, label: c.label || colLetter(i) }));
     const rows = json.table.rows.map(r =>
-      r.c.slice(0, cols.length).map(cell => cell?.f ?? cell?.v ?? '')
+      cols.map((_, ci) => { const cell = r.c?.[ci]; return cell?.f ?? cell?.v ?? ''; })
     );
 
     currentData = { cols, rows };
